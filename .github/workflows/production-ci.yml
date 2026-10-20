@@ -48,7 +48,7 @@ jobs:
 
       - name: upload application JAR
         if: success() && github.event_name != 'pull_request'
-        uses: action/upload-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: spring-petclinic-${{github.sha}}
           path: target/*.jar
