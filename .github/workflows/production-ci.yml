@@ -6,11 +6,13 @@ on:
   pull_request:
     branches: [main]
 
-permissions: 
+permissions:
   contents: read
+  security-events: write
+  pull-requests: read
 
 concurrency:
-  group: production-ci-${{github.ref}}
+  group: production-ci-${{github.workflow}}-${{github.ref}}
   cancel-in-progress: true
 
 jobs:
@@ -30,19 +32,61 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: verify Java
-        run: java -version
-
       - name: Run tests and verify build
         run: ./mvnw -B clean verify
 
-      - name: Upload application artifact
-        if: success() && github.event_name == 'push'
+      - name: Upload test reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Spring-petclinic-${{github.sha}}
-          path: target/*.jar
-          if-no-files-found: error
+          name: test-report-${{github.sha}}
+          path: |
+            **/target/surefire-reports/**
+            **/target/failsafe-reports/**
+          if-no-files-found: ignore
           retention-days: 7
-  
-    
+
+      - name: upload application JAR
+        if: success() && github.event_name != 'pull_request'
+        uses: action/upload-artifact@v4
+        with:
+          name: spring-petclinic-${{github.sha}}
+          path: target/*.jar
+          retention-days: 7
+
+  code-security:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin
+          build-mode: autobuild
+          queries: security-extended
+
+      - name: Analyze source code
+        uses: github/codeql-action/analyze@v4
+
+
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          
+          
